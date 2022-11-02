@@ -22,14 +22,16 @@ class Service {
 	async getListIssueByProject() {
 		const url = `${BASE_URL}/search?jql=project=${PROJECT_KEY}`;
 		try {
+			console.log("Step (1/4): Get issue list");
+			const interval = this.loadingAnimation();
 			const response = await fetch(url, {
 				method: "GET",
 				headers,
 			});
 			const json = await response.json();
 			const listIssueId = json?.issues?.map((ele) => ele.id) || [];
-			console.log("Step (1/4): Get issue list");
 
+			this.clearInterval(interval);
 			return listIssueId;
 		} catch (error) {
 			console.error(error);
@@ -54,12 +56,14 @@ class Service {
 	}
 
 	async getListAttachmentByListIssueId(listIssueId) {
+		console.log("\rStep (2/4): Get attachment id list");
+		const interval = this.loadingAnimation();
 		let listAttachmentId = [];
 		for (const issueId of listIssueId) {
 			const temp = await this.getListAttachmentIdByIssueId(issueId);
 			listAttachmentId = [...listAttachmentId, ...temp];
 		}
-		console.log("Step (2/4): Get attachment id list");
+		this.clearInterval(interval);
 		return listAttachmentId;
 	}
 
@@ -78,12 +82,14 @@ class Service {
 	}
 
 	async getListAttachment(listAttachmentId) {
+		console.log("Step (3/4): Get attachment list");
+		const interval = this.loadingAnimation();
 		const listAttachment = [];
 		for (const attachmentId of listAttachmentId) {
 			const temp = await this.getAttachmentInfo(attachmentId);
 			listAttachment.push(temp);
 		}
-		console.log("Step (3/4): Get attachment list");
+		this.clearInterval(interval);
 		return listAttachment;
 	}
 
@@ -100,16 +106,38 @@ class Service {
 
 		for (const attachment of listAttachment) {
 			try {
-				request({ method: "GET", url: attachment.content, headers }).pipe(
-					fs.createWriteStream(`${directory}/${attachment.filename}`)
-				);
-				i++;
-				process.stdout.write(`\rDownloading (${i}/${total})`);
+				request({ method: "GET", url: attachment.content, headers })
+					.on("error", (error) => {
+						console.log(attachment);
+						console.error("Download ", error);
+					})
+					.pipe(fs.createWriteStream(`${directory}/${attachment.filename}`))
+					.on("error", (error) => {
+						console.error("Write file error:", error);
+					});
 			} catch (error) {
 				console.error(error);
 			}
+			i++;
+			// process.stdout.write(`Downloading (${i}/${total})`);
 		}
-		console.log(`\r%cDownload Completed! (${i}/${total})`, "color: #bada55");
+		console.log(`%cDownload completed! (${i}/${total})`, "color: #bada55");
+		return true;
+	}
+
+	loadingAnimation(text = "\rpending") {
+		const chars = [".  ", ".. ", "...", " ..", "  .", "   "];
+		let i = 0;
+		return setInterval(function () {
+			process.stdout.write(text + chars[i++]);
+			i = i % chars.length;
+		}, 200);
+	}
+
+	clearInterval(interval) {
+		clearInterval(interval);
+		process.stdout.clearLine(); // clear current text
+		process.stdout.cursorTo(0); // move cursor to beginning of line
 	}
 }
 
